@@ -86,12 +86,23 @@ class SchoolMenuNotifier:
             raise ValueError(f"Email configuration incomplete. Missing required environment variables: {', '.join(missing_vars)}")
         
         # Log configuration (without sensitive data)
-        logger.info(f"Configuration loaded - School: {self.school_id}, Grade: {self.grade}, SMTP: {self.smtp_server}:{self.smtp_port}")
+        test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
+        logger.info(f"Configuration loaded - School: {self.school_id}, Grade: {self.grade}, SMTP: {self.smtp_server}:{self.smtp_port}, TEST_RUN: {test_run}")
 
-    def get_tomorrow_date(self) -> str:
-        """Get tomorrow's date in MM/DD/YYYY format."""
-        tomorrow = datetime.now() + timedelta(days=1)
-        return tomorrow.strftime('%m/%d/%Y')
+    def get_target_date(self) -> str:
+        """Get the target date based on test_run setting."""
+        test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
+        
+        if test_run:
+            # For test runs, use today's date
+            target_date = datetime.now()
+            logger.info("TEST_RUN is true - using today's date")
+        else:
+            # For normal runs, use tomorrow's date
+            target_date = datetime.now() + timedelta(days=1)
+            logger.info("Using tomorrow's date (normal operation)")
+        
+        return target_date.strftime('%m/%d/%Y')
 
     def fetch_menu_data(self, serving_date: str) -> Optional[Dict]:
         """Fetch menu data from the SchoolCafe API."""
@@ -136,6 +147,10 @@ class SchoolMenuNotifier:
         except ValueError:
             display_date = serving_date
         
+        # Determine if this is a test run
+        test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
+        header_text = "Today's School Lunch Menu" if test_run else "Tomorrow's School Lunch Menu"
+        
         email_content = f"""
 <html>
 <head>
@@ -149,11 +164,23 @@ class SchoolMenuNotifier:
         .item-details {{ color: #666; font-size: 14px; margin-top: 5px; }}
         .allergens {{ color: #d32f2f; font-size: 12px; margin-top: 5px; }}
         .footer {{ margin-top: 30px; text-align: center; color: #666; font-size: 12px; }}
+        .test-banner {{ background-color: #FF9800; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 5px; }}
     </style>
 </head>
 <body>
+"""
+        
+        # Add test run banner if applicable
+        if test_run:
+            email_content += f"""
+    <div class="test-banner">
+        🧪 <strong>TEST RUN</strong> - This is a test email using today's menu
+    </div>
+"""
+        
+        email_content += f"""
     <div class="header">
-        <h1>🍽️ Tomorrow's School Lunch Menu</h1>
+        <h1>🍽️ {header_text}</h1>
         <h2>{display_date}</h2>
     </div>
 """
@@ -235,12 +262,17 @@ class SchoolMenuNotifier:
     def run(self) -> bool:
         """Main execution method."""
         try:
-            # Get tomorrow's date
-            tomorrow_date = self.get_tomorrow_date()
-            logger.info(f"Processing menu for tomorrow: {tomorrow_date}")
+            # Get target date (today for test runs, tomorrow for normal runs)
+            target_date = self.get_target_date()
+            test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
+            
+            if test_run:
+                logger.info(f"Processing menu for today (TEST_RUN): {target_date}")
+            else:
+                logger.info(f"Processing menu for tomorrow: {target_date}")
             
             # Fetch menu data
-            menu_data = self.fetch_menu_data(tomorrow_date)
+            menu_data = self.fetch_menu_data(target_date)
             if not menu_data:
                 logger.error("Failed to fetch menu data")
                 return False
@@ -250,14 +282,15 @@ class SchoolMenuNotifier:
                             for items in menu_data.values())
             
             if total_items == 0:
-                logger.warning("No menu items found for tomorrow")
+                logger.warning(f"No menu items found for {target_date}")
                 # Still send an email to notify about no menu
-                subject = f"School Menu - {tomorrow_date} (No Menu Available)"
+                date_description = "today" if test_run else "tomorrow"
+                subject = f"School Menu - {target_date} (No Menu Available)"
                 content = f"""
                 <html>
                 <body>
                     <h2>No School Menu Available</h2>
-                    <p>No lunch menu items were found for {tomorrow_date}.</p>
+                    <p>No lunch menu items were found for {target_date} ({date_description}).</p>
                     <p>This could mean:</p>
                     <ul>
                         <li>It's a school holiday</li>
@@ -269,8 +302,9 @@ class SchoolMenuNotifier:
                 """
             else:
                 # Format and send menu email
-                subject = f"Tomorrow's School Lunch Menu - {tomorrow_date}"
-                content = self.format_menu_email(menu_data, tomorrow_date)
+                date_description = "Today's" if test_run else "Tomorrow's"
+                subject = f"{date_description} School Lunch Menu - {target_date}"
+                content = self.format_menu_email(menu_data, target_date)
                 logger.info(f"Formatted menu with {total_items} items")
             
             # Send email
