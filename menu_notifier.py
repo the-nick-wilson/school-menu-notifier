@@ -37,20 +37,33 @@ class SchoolMenuNotifier:
         logger.info(f"  SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT_SET')}")
         logger.info(f"  RECIPIENT_EMAIL: {os.getenv('RECIPIENT_EMAIL', 'NOT_SET')}")
         
-        self.school_id = os.getenv('SCHOOL_ID', '2f37947e-6d30-4bb3-a306-7f69a3b3ed62')
-        self.grade = os.getenv('GRADE', '01')
-        self.serving_line = os.getenv('SERVING_LINE', 'Main Line')
-        self.meal_type = os.getenv('MEAL_TYPE', 'Lunch')
+        # Handle school configuration with fallbacks for empty strings
+        school_id_env = os.getenv('SCHOOL_ID', '')
+        self.school_id = school_id_env if school_id_env else '2f37947e-6d30-4bb3-a306-7f69a3b3ed62'
         
-        # Email configuration
-        self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        grade_env = os.getenv('GRADE', '')
+        self.grade = grade_env if grade_env else '01'
+        
+        serving_line_env = os.getenv('SERVING_LINE', '')
+        self.serving_line = serving_line_env if serving_line_env else 'Main Line'
+        
+        meal_type_env = os.getenv('MEAL_TYPE', '')
+        self.meal_type = meal_type_env if meal_type_env else 'Lunch'
+        
+        # Email configuration with fallbacks for empty strings
+        smtp_server_env = os.getenv('SMTP_SERVER', '')
+        self.smtp_server = smtp_server_env if smtp_server_env else 'smtp.gmail.com'
         
         # Handle SMTP_PORT with better error handling
-        smtp_port_str = os.getenv('SMTP_PORT', '587')
-        try:
-            self.smtp_port = int(smtp_port_str) if smtp_port_str else 587
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid SMTP_PORT '{smtp_port_str}', using default 587")
+        smtp_port_str = os.getenv('SMTP_PORT', '')
+        if smtp_port_str:
+            try:
+                self.smtp_port = int(smtp_port_str)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid SMTP_PORT '{smtp_port_str}', using default 587")
+                self.smtp_port = 587
+        else:
+            logger.info("SMTP_PORT not set, using default 587")
             self.smtp_port = 587
         
         self.sender_email = os.getenv('SENDER_EMAIL')
@@ -186,6 +199,13 @@ class SchoolMenuNotifier:
     def send_email(self, subject: str, html_content: str) -> bool:
         """Send the formatted email."""
         try:
+            # Validate SMTP configuration
+            if not self.smtp_server:
+                logger.error("SMTP_SERVER is not configured")
+                return False
+            
+            logger.info(f"Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}")
+            
             # Create message
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
@@ -198,8 +218,11 @@ class SchoolMenuNotifier:
             
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                logger.info("SMTP connection established, starting TLS...")
                 server.starttls()
+                logger.info("TLS started, attempting login...")
                 server.login(self.sender_email, self.sender_password)
+                logger.info("Login successful, sending message...")
                 server.send_message(msg)
             
             logger.info(f"Email sent successfully to {self.recipient_email}")

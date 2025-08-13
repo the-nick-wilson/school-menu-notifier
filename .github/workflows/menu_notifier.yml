@@ -49,30 +49,6 @@ jobs:
           exit 1
         fi
         echo "✅ All required environment variables are set"
-        
-        # Set defaults for optional variables
-        export SCHOOL_ID="${{ secrets.SCHOOL_ID }}"
-        export GRADE="${{ secrets.GRADE }}"
-        export SERVING_LINE="${{ secrets.SERVING_LINE }}"
-        export MEAL_TYPE="${{ secrets.MEAL_TYPE }}"
-        export SMTP_SERVER="${{ secrets.SMTP_SERVER }}"
-        export SMTP_PORT="${{ secrets.SMTP_PORT }}"
-        
-        # Set defaults if not provided
-        if [ -z "$SCHOOL_ID" ]; then export SCHOOL_ID="2f37947e-6d30-4bb3-a306-7f69a3b3ed62"; fi
-        if [ -z "$GRADE" ]; then export GRADE="01"; fi
-        if [ -z "$SERVING_LINE" ]; then export SERVING_LINE="Main Line"; fi
-        if [ -z "$MEAL_TYPE" ]; then export MEAL_TYPE="Lunch"; fi
-        if [ -z "$SMTP_SERVER" ]; then export SMTP_SERVER="smtp.gmail.com"; fi
-        if [ -z "$SMTP_PORT" ]; then export SMTP_PORT="587"; fi
-        
-        echo "Configuration:"
-        echo "  SCHOOL_ID: $SCHOOL_ID"
-        echo "  GRADE: $GRADE"
-        echo "  SERVING_LINE: $SERVING_LINE"
-        echo "  MEAL_TYPE: $MEAL_TYPE"
-        echo "  SMTP_SERVER: $SMTP_SERVER"
-        echo "  SMTP_PORT: $SMTP_PORT"
 
     - name: Run menu notifier
       env:
@@ -86,6 +62,17 @@ jobs:
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
         RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
       run: |
+        echo "Configuration being used:"
+        echo "  SCHOOL_ID: $SCHOOL_ID"
+        echo "  GRADE: $GRADE"
+        echo "  SERVING_LINE: $SERVING_LINE"
+        echo "  MEAL_TYPE: $MEAL_TYPE"
+        echo "  SMTP_SERVER: $SMTP_SERVER"
+        echo "  SMTP_PORT: $SMTP_PORT"
+        echo "  SENDER_EMAIL: $SENDER_EMAIL"
+        echo "  RECIPIENT_EMAIL: $RECIPIENT_EMAIL"
+        echo ""
+        echo "Running menu notifier..."
         python menu_notifier.py
     
     - name: Handle failure
