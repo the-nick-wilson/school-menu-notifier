@@ -61,6 +61,7 @@ jobs:
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
         RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        TEST_RUN: ${{ inputs.test_run }}
       run: |
         echo "Configuration being used:"
         echo "  SCHOOL_ID: $SCHOOL_ID"
@@ -71,6 +72,7 @@ jobs:
         echo "  SMTP_PORT: $SMTP_PORT"
         echo "  SENDER_EMAIL: $SENDER_EMAIL"
         echo "  RECIPIENT_EMAIL: $RECIPIENT_EMAIL"
+        echo "  TEST_RUN: $TEST_RUN"
         echo ""
         echo "Running menu notifier..."
         python menu_notifier.py
