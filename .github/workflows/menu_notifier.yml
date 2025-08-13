@@ -2,9 +2,9 @@ name: School Menu Notifier
 
 on:
   schedule:
-    # Run every weekday at 6:00 PM UTC (adjust timezone as needed)
+    # Run every weekday at 5:00 PM MDT/MST (11:00 PM UTC)
     # This ensures the menu for the next day is available
-    - cron: '0 18 * * 1-5'
+    - cron: '0 23 * * 1-5'
   
   # Allow manual triggering
   workflow_dispatch:
@@ -61,6 +61,7 @@ jobs:
         SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
         SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
         RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        ADDITIONAL_RECIPIENTS: ${{ secrets.ADDITIONAL_RECIPIENTS }}
         TEST_RUN: ${{ inputs.test_run }}
       run: |
         echo "Configuration being used:"
@@ -72,6 +73,7 @@ jobs:
         echo "  SMTP_PORT: $SMTP_PORT"
         echo "  SENDER_EMAIL: $SENDER_EMAIL"
         echo "  RECIPIENT_EMAIL: $RECIPIENT_EMAIL"
+        echo "  ADDITIONAL_RECIPIENTS: $ADDITIONAL_RECIPIENTS"
         echo "  TEST_RUN: $TEST_RUN"
         echo ""
         echo "Running menu notifier..."

@@ -6,7 +6,7 @@ A Python script that automatically fetches your child's school lunch menu for th
 
 - 🍽️ Fetches lunch menu data from SchoolCafe API
 - 📧 Sends beautifully formatted HTML emails
-- ⏰ Runs automatically every weekday at 6:00 PM UTC
+- ⏰ Runs automatically every weekday at 5:00 PM MDT/MST
 - 🔧 Configurable via environment variables
 - 📱 Responsive email design
 - ⚠️ Allergen information included
@@ -14,7 +14,7 @@ A Python script that automatically fetches your child's school lunch menu for th
 
 ## How It Works
 
-1. **Scheduled Execution**: GitHub Actions runs the script every weekday at 6:00 PM UTC
+1. **Scheduled Execution**: GitHub Actions runs the script every weekday at 5:00 PM MDT/MST
 2. **API Fetch**: Retrieves tomorrow's lunch menu from SchoolCafe
 3. **Data Processing**: Formats the menu items by category (Entrees, Vegetables, Fruits, Milk)
 4. **Email Generation**: Creates a beautiful HTML email with all menu details
@@ -41,6 +41,7 @@ Go to your repository's **Settings** → **Secrets and variables** → **Actions
 - `SENDER_EMAIL`: Your Gmail address
 - `SENDER_PASSWORD`: Your Gmail app password (see Gmail setup below)
 - `RECIPIENT_EMAIL`: Where to send the menu emails
+- `ADDITIONAL_RECIPIENTS`: Comma-separated list of additional email addresses (optional)
 
 #### Optional Secrets:
 - `SMTP_SERVER`: SMTP server (default: `smtp.gmail.com`)
@@ -92,6 +93,7 @@ Edit `.github/workflows/menu_notifier.yml` to change when the script runs:
 ```yaml
 schedule:
   # Run at different times or days
+  - cron: '0 23 * * 1-5'  # Weekdays at 5 PM MDT/MST (11 PM UTC)
   - cron: '0 18 * * 1-5'  # Weekdays at 6 PM UTC
   - cron: '0 12 * * 1-5'  # Weekdays at 12 PM UTC
 ```
