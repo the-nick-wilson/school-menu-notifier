@@ -35,7 +35,7 @@ RECIPIENT_EMAIL=where-to-send@example.com
 
 ## ⚡ What Happens Next
 
-- **Every weekday at 6:00 PM UTC**: Script runs automatically
+- **Every weekday at 5:00 PM MDT/MST**: Script runs automatically
 - **Fetches tomorrow's lunch menu** from your school
 - **Sends beautiful email** with all menu items
 - **Includes allergens** and nutritional info
