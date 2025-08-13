@@ -26,6 +26,17 @@ logger = logging.getLogger(__name__)
 class SchoolMenuNotifier:
     def __init__(self):
         """Initialize the notifier with configuration from environment variables."""
+        # Log all environment variables for debugging (without sensitive data)
+        logger.info("Environment variables:")
+        logger.info(f"  SCHOOL_ID: {os.getenv('SCHOOL_ID', 'NOT_SET')}")
+        logger.info(f"  GRADE: {os.getenv('GRADE', 'NOT_SET')}")
+        logger.info(f"  SERVING_LINE: {os.getenv('SERVING_LINE', 'NOT_SET')}")
+        logger.info(f"  MEAL_TYPE: {os.getenv('MEAL_TYPE', 'NOT_SET')}")
+        logger.info(f"  SMTP_SERVER: {os.getenv('SMTP_SERVER', 'NOT_SET')}")
+        logger.info(f"  SMTP_PORT: {os.getenv('SMTP_PORT', 'NOT_SET')}")
+        logger.info(f"  SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT_SET')}")
+        logger.info(f"  RECIPIENT_EMAIL: {os.getenv('RECIPIENT_EMAIL', 'NOT_SET')}")
+        
         self.school_id = os.getenv('SCHOOL_ID', '2f37947e-6d30-4bb3-a306-7f69a3b3ed62')
         self.grade = os.getenv('GRADE', '01')
         self.serving_line = os.getenv('SERVING_LINE', 'Main Line')
@@ -33,7 +44,15 @@ class SchoolMenuNotifier:
         
         # Email configuration
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-        self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        
+        # Handle SMTP_PORT with better error handling
+        smtp_port_str = os.getenv('SMTP_PORT', '587')
+        try:
+            self.smtp_port = int(smtp_port_str) if smtp_port_str else 587
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid SMTP_PORT '{smtp_port_str}', using default 587")
+            self.smtp_port = 587
+        
         self.sender_email = os.getenv('SENDER_EMAIL')
         self.sender_password = os.getenv('SENDER_PASSWORD')
         self.recipient_email = os.getenv('RECIPIENT_EMAIL')
@@ -41,8 +60,20 @@ class SchoolMenuNotifier:
         # API configuration
         self.api_base_url = 'https://webapis.schoolcafe.com/api/CalendarView/GetDailyMenuitemsByGrade'
         
-        if not all([self.sender_email, self.sender_password, self.recipient_email]):
-            raise ValueError("Email configuration incomplete. Please set SENDER_EMAIL, SENDER_PASSWORD, and RECIPIENT_EMAIL environment variables.")
+        # Validate required email configuration
+        missing_vars = []
+        if not self.sender_email:
+            missing_vars.append('SENDER_EMAIL')
+        if not self.sender_password:
+            missing_vars.append('SENDER_PASSWORD')
+        if not self.recipient_email:
+            missing_vars.append('RECIPIENT_EMAIL')
+        
+        if missing_vars:
+            raise ValueError(f"Email configuration incomplete. Missing required environment variables: {', '.join(missing_vars)}")
+        
+        # Log configuration (without sensitive data)
+        logger.info(f"Configuration loaded - School: {self.school_id}, Grade: {self.grade}, SMTP: {self.smtp_server}:{self.smtp_port}")
 
     def get_tomorrow_date(self) -> str:
         """Get tomorrow's date in MM/DD/YYYY format."""
@@ -231,7 +262,17 @@ class SchoolMenuNotifier:
 def main():
     """Main entry point."""
     try:
-        notifier = SchoolMenuNotifier()
+        logger.info("Starting School Menu Notifier...")
+        
+        # Test configuration loading first
+        try:
+            notifier = SchoolMenuNotifier()
+            logger.info("Configuration loaded successfully")
+        except Exception as config_error:
+            logger.error(f"Configuration error: {config_error}")
+            exit(1)
+        
+        # Run the notifier
         success = notifier.run()
         
         if success:
