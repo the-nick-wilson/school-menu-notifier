@@ -4,7 +4,7 @@ on:
   schedule:
     # Run every weekday at 6:00 PM UTC (adjust timezone as needed)
     # This ensures the menu for the next day is available
-    - cron: '0 19 * * *'
+    - cron: '0 18 * * 1-5'
   
   # Allow manual triggering
   workflow_dispatch:
