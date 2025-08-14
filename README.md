@@ -6,19 +6,29 @@ A Python script that automatically fetches your child's school lunch menu for th
 
 - 🍽️ Fetches lunch menu data from SchoolCafe API
 - 📧 Sends beautifully formatted HTML emails
-- ⏰ Runs automatically every weekday at 5:00 PM MDT/MST
+- ⏰ **Daily**: Runs automatically every weekday at 5:00 PM MDT/MST
+- 📅 **Weekly**: Runs automatically every Sunday at 5:00 PM MDT/MST
 - 🔧 Configurable via environment variables
 - 📱 Responsive email design
 - ⚠️ Allergen information included
 - 🧪 Manual testing capability
+- 📊 Weekly overview with entrees only (simplified format)
 
 ## How It Works
 
+### Daily Notifications (Weekdays)
 1. **Scheduled Execution**: GitHub Actions runs the script every weekday at 5:00 PM MDT/MST
 2. **API Fetch**: Retrieves tomorrow's lunch menu from SchoolCafe
 3. **Data Processing**: Formats the menu items by category (Entrees, Vegetables, Fruits, Milk)
 4. **Email Generation**: Creates a beautiful HTML email with all menu details
 5. **Delivery**: Sends the email to your specified address
+
+### Weekly Notifications (Sundays)
+1. **Scheduled Execution**: GitHub Actions runs every Sunday at 5:00 PM MDT/MST
+2. **API Fetch**: Retrieves the entire upcoming week's lunch menus (Monday-Friday)
+3. **Data Processing**: Extracts and formats just the entrees for each day
+4. **Email Generation**: Creates a weekly overview email with simplified format
+5. **Delivery**: Sends the weekly preview to all recipients
 
 ## Setup Instructions
 
@@ -88,14 +98,24 @@ The generated email includes:
 
 ### Modify Schedule
 
-Edit `.github/workflows/menu_notifier.yml` to change when the script runs:
+Edit the workflow files to change when the scripts run:
 
+**Daily Notifications** (`.github/workflows/menu_notifier.yml`):
 ```yaml
 schedule:
   # Run at different times or days
   - cron: '0 23 * * 1-5'  # Weekdays at 5 PM MDT/MST (11 PM UTC)
   - cron: '0 18 * * 1-5'  # Weekdays at 6 PM UTC
   - cron: '0 12 * * 1-5'  # Weekdays at 12 PM UTC
+```
+
+**Weekly Notifications** (`.github/workflows/weekly_menu_notifier.yml`):
+```yaml
+schedule:
+  # Run at different times or days
+  - cron: '0 23 * * 0'    # Sundays at 5 PM MDT/MST (11 PM UTC)
+  - cron: '0 18 * * 0'    # Sundays at 6 PM UTC
+  - cron: '0 12 * * 0'    # Sundays at 12 PM UTC
 ```
 
 ### Add More Meal Types
