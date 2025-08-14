@@ -120,22 +120,32 @@ class WeeklySchoolMenuNotifier:
             if current_weekday == 6:  # Sunday
                 # If it's Sunday, show the entire upcoming week
                 start_date = today + timedelta(days=1)  # Monday
+                end_date = start_date + timedelta(days=4)  # Friday
                 logger.info("Sunday detected - showing entire upcoming week")
             else:
-                # Show from tomorrow to Friday
+                # Show from tomorrow to Friday of current week
                 start_date = today + timedelta(days=1)
-                logger.info(f"Showing rest of week starting from {start_date.strftime('%A')}")
+                # Calculate days until Friday (Friday is weekday 4)
+                days_until_friday = 4 - current_weekday
+                if days_until_friday > 0:
+                    end_date = today + timedelta(days=days_until_friday)
+                else:
+                    # If it's already Friday or later, just show tomorrow
+                    end_date = start_date
+                logger.info(f"Showing rest of week from {start_date.strftime('%A')} to {end_date.strftime('%A')}")
         else:
             # For normal Sunday runs, show the upcoming week
             start_date = today + timedelta(days=1)  # Monday
+            end_date = start_date + timedelta(days=4)  # Friday
             logger.info("Normal operation - showing upcoming week starting Monday")
         
-        # Generate dates for Monday through Friday
+        # Generate dates from start to end (inclusive)
         week_dates = []
-        for i in range(5):  # Monday through Friday
-            date = start_date + timedelta(days=i)
-            if date.weekday() < 5:  # Only weekdays
-                week_dates.append((date, date.strftime('%m/%d/%Y')))
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.weekday() < 5:  # Only weekdays
+                week_dates.append((current_date, current_date.strftime('%m/%d/%Y')))
+            current_date += timedelta(days=1)
         
         logger.info(f"Generated {len(week_dates)} weekdays: {[date.strftime('%A %m/%d') for date, _ in week_dates]}")
         return week_dates
