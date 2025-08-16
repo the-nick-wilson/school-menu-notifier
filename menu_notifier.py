@@ -119,6 +119,11 @@ class SchoolMenuNotifier:
             target_date = datetime.now() + timedelta(days=1)
             logger.info("Using tomorrow's date (normal operation)")
         
+        # Check if target date is a weekend
+        target_weekday = target_date.weekday()
+        if target_weekday >= 5:  # Saturday (5) or Sunday (6)
+            logger.info(f"Target date {target_date.strftime('%A %m/%d')} is a weekend - expecting no menu")
+        
         return target_date.strftime('%m/%d/%Y')
 
     def fetch_menu_data(self, serving_date: str) -> Optional[Dict]:
@@ -146,6 +151,12 @@ class SchoolMenuNotifier:
             
             data = response.json()
             logger.info(f"Successfully fetched menu data with {len(data)} categories")
+            
+            # Check if we got an empty response (common for weekends/holidays)
+            if not data or len(data) == 0:
+                logger.info(f"Empty response received for {serving_date} - likely weekend or holiday")
+                return {}  # Return empty dict instead of None
+            
             return data
             
         except requests.exceptions.RequestException as e:
@@ -310,8 +321,8 @@ class SchoolMenuNotifier:
             
             # Fetch menu data
             menu_data = self.fetch_menu_data(target_date)
-            if not menu_data:
-                logger.error("Failed to fetch menu data")
+            if menu_data is None:
+                logger.error("Failed to fetch menu data (API error)")
                 return False
             
             # Check if we have any menu items
@@ -319,7 +330,7 @@ class SchoolMenuNotifier:
                             for items in menu_data.values())
             
             if total_items == 0:
-                logger.warning(f"No menu items found for {target_date}")
+                logger.info(f"No menu items found for {target_date} - likely weekend or holiday")
                 # Still send an email to notify about no menu
                 date_description = "today" if test_run else "tomorrow"
                 subject = f"School Menu - {target_date} (No Menu Available)"
@@ -330,10 +341,12 @@ class SchoolMenuNotifier:
                     <p>No lunch menu items were found for {target_date} ({date_description}).</p>
                     <p>This could mean:</p>
                     <ul>
+                        <li>It's a weekend (no school)</li>
                         <li>It's a school holiday</li>
                         <li>Menu hasn't been posted yet</li>
                         <li>There's a technical issue</li>
                     </ul>
+                    <p><em>This is normal for weekends and holidays.</em></p>
                 </body>
                 </html>
                 """
