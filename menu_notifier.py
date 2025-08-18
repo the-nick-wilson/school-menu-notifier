@@ -166,7 +166,74 @@ class SchoolMenuNotifier:
             logger.error(f"Error parsing JSON response: {e}")
             return None
 
-    def format_menu_email(self, menu_data: Dict, serving_date: str) -> str:
+    def fetch_prek_menu_data(self, serving_date: str) -> Optional[Dict]:
+        """Fetch PreK menu data from the SchoolCafe API."""
+        params = {
+            'SchoolId': self.school_id,
+            'ServingDate': serving_date,
+            'ServingLine': 'Prek Lunch',
+            'MealType': self.meal_type,
+            'Grade': 'PK',
+            'PersonId': 'null'
+        }
+        
+        headers = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'en-US,en;q=0.9,es;q=0.8',
+            'origin': 'https://www.schoolcafe.com',
+            'referer': 'https://www.schoolcafe.com/'
+        }
+        
+        try:
+            logger.info(f"Fetching PreK menu data for {serving_date}")
+            response = requests.get(self.api_base_url, params=params, headers=headers)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.info(f"Successfully fetched PreK menu data with {len(data)} categories")
+            
+            # Check if we got an empty response (common for weekends/holidays)
+            if not data or len(data) == 0:
+                logger.info(f"Empty PreK response received for {serving_date} - likely weekend or holiday")
+                return {}  # Return empty dict instead of None
+            
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching PreK menu data: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing PreK JSON response: {e}")
+            return None
+
+    def find_prek_entree(self, main_menu_data: Dict, prek_menu_data: Dict) -> Optional[str]:
+        """Find which main line entree is also served to preschoolers."""
+        if not main_menu_data or not prek_menu_data:
+            return None
+        
+        # Extract entrees from both menus
+        main_entrees = []
+        if 'ENTREES' in main_menu_data and isinstance(main_menu_data['ENTREES'], list):
+            main_entrees = [item.get('MenuItemDescription', '') for item in main_menu_data['ENTREES'] if isinstance(item, dict)]
+        
+        prek_entrees = []
+        if 'ENTREES' in prek_menu_data and isinstance(prek_menu_data['ENTREES'], list):
+            prek_entrees = [item.get('MenuItemDescription', '') for item in prek_menu_data['ENTREES'] if isinstance(item, dict)]
+        
+        # Find matching entrees
+        matching_entrees = []
+        for main_entree in main_entrees:
+            if main_entree in prek_entrees:
+                matching_entrees.append(main_entree)
+        
+        if matching_entrees:
+            logger.info(f"Found {len(matching_entrees)} matching entrees for PreK: {matching_entrees}")
+            return matching_entrees[0]  # Return the first match
+        
+        logger.info("No matching entrees found between main line and PreK")
+        return None
+
+    def format_menu_email(self, menu_data: Dict, serving_date: str, prek_entree: Optional[str] = None) -> str:
         """Format the menu data into a readable email."""
         # Convert date format for display
         try:
@@ -191,6 +258,7 @@ class SchoolMenuNotifier:
         .item-name {{ font-weight: bold; color: #333; }}
         .item-details {{ color: #666; font-size: 14px; margin-top: 5px; }}
         .allergens {{ color: #d32f2f; font-size: 12px; margin-top: 5px; }}
+        .prek-note {{ color: #666; font-size: 12px; font-style: italic; margin-top: 20px; text-align: center; }}
         .footer {{ margin-top: 30px; text-align: center; color: #666; font-size: 12px; }}
         .test-banner {{ background-color: #FF9800; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 5px; }}
     </style>
@@ -222,7 +290,13 @@ class SchoolMenuNotifier:
                 for item in items:
                     if isinstance(item, dict) and 'MenuItemDescription' in item:
                         email_content += '<div class="menu-item">\n'
-                        email_content += f'<div class="item-name">{item["MenuItemDescription"]}</div>\n'
+                        
+                        # Item name with PreK indicator if applicable
+                        item_name = item["MenuItemDescription"]
+                        if prek_entree and item_name == prek_entree:
+                            email_content += f'<div class="item-name">{item_name} *</div>\n'
+                        else:
+                            email_content += f'<div class="item-name">{item_name}</div>\n'
                         
                         # Add serving size if available
                         if item.get('ServingSizeByGrade'):
@@ -239,6 +313,14 @@ class SchoolMenuNotifier:
                         email_content += '</div>\n'
                 
                 email_content += '</div>\n'
+        
+        # Add PreK note if applicable
+        if prek_entree:
+            email_content += """
+    <div class="prek-note">
+        * Pre-K item
+    </div>
+"""
         
         email_content += """
     <div class="footer">
@@ -319,11 +401,23 @@ class SchoolMenuNotifier:
             else:
                 logger.info(f"Processing menu for tomorrow: {target_date}")
             
-            # Fetch menu data
+            # Fetch main menu data
             menu_data = self.fetch_menu_data(target_date)
             if menu_data is None:
                 logger.error("Failed to fetch menu data (API error)")
                 return False
+            
+            # Fetch PreK menu data to find matching entree
+            prek_menu_data = self.fetch_prek_menu_data(target_date)
+            prek_entree = None
+            if prek_menu_data is not None:
+                prek_entree = self.find_prek_entree(menu_data, prek_menu_data)
+                if prek_entree:
+                    logger.info(f"PreK entree identified: {prek_entree}")
+                else:
+                    logger.info("No matching PreK entree found")
+            else:
+                logger.warning("Could not fetch PreK menu data - continuing without PreK indicator")
             
             # Check if we have any menu items
             total_items = sum(len(items) if isinstance(items, list) else 0 
@@ -354,7 +448,7 @@ class SchoolMenuNotifier:
                 # Format and send menu email
                 date_description = "Today's" if test_run else "Tomorrow's"
                 subject = f"{date_description} School Lunch Menu - {target_date}"
-                content = self.format_menu_email(menu_data, target_date)
+                content = self.format_menu_email(menu_data, target_date, prek_entree)
                 logger.info(f"Formatted menu with {total_items} items")
             
             # Send email

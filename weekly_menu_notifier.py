@@ -150,7 +150,7 @@ class WeeklySchoolMenuNotifier:
         logger.info(f"Generated {len(week_dates)} weekdays: {[date.strftime('%A %m/%d') for date, _ in week_dates]}")
         return week_dates
 
-    def fetch_menu_data(self, serving_date: str) -> Optional[Dict]:
+    def fetch_main_menu_data(self, serving_date: str) -> Optional[Dict]:
         """Fetch menu data from the SchoolCafe API."""
         params = {
             'SchoolId': self.school_id,
@@ -174,7 +174,7 @@ class WeeklySchoolMenuNotifier:
             response.raise_for_status()
             
             data = response.json()
-            logger.info(f"Successfully fetched menu data with {len(data)} categories")
+            logger.info(f"Successfully fetched main menu data with {len(data)} categories")
             return data
             
         except requests.exceptions.RequestException as e:
@@ -193,7 +193,74 @@ class WeeklySchoolMenuNotifier:
                     entrees.append(entree)
         return entrees
 
-    def format_weekly_email(self, week_menus: List[Tuple[datetime, str, Optional[Dict]]]) -> str:
+    def fetch_prek_menu_data(self, serving_date: str) -> Optional[Dict]:
+        """Fetch PreK menu data from the SchoolCafe API."""
+        params = {
+            'SchoolId': self.school_id,
+            'ServingDate': serving_date,
+            'ServingLine': 'Prek Lunch',
+            'MealType': self.meal_type,
+            'Grade': 'PK',
+            'PersonId': 'null'
+        }
+        
+        headers = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'en-US,en;q=0.9,es;q=0.8',
+            'origin': 'https://www.schoolcafe.com',
+            'referer': 'https://www.schoolcafe.com/'
+        }
+        
+        try:
+            logger.info(f"Fetching PreK menu data for {serving_date}")
+            response = requests.get(self.api_base_url, params=params, headers=headers)
+            response.raise_for_status()
+            
+            data = response.json()
+            logger.info(f"Successfully fetched PreK menu data with {len(data)} categories")
+            
+            # Check if we got an empty response (common for weekends/holidays)
+            if not data or len(data) == 0:
+                logger.info(f"Empty PreK response received for {serving_date} - likely weekend or holiday")
+                return {}  # Return empty dict instead of None
+            
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching PreK menu data: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing PreK JSON response: {e}")
+            return None
+
+    def find_prek_entree(self, main_menu_data: Dict, prek_menu_data: Dict) -> Optional[str]:
+        """Find which main line entree is also served to preschoolers."""
+        if not main_menu_data or not prek_menu_data:
+            return None
+        
+        # Extract entrees from both menus
+        main_entrees = []
+        if 'ENTREES' in main_menu_data and isinstance(main_menu_data['ENTREES'], list):
+            main_entrees = [item.get('MenuItemDescription', '') for item in main_menu_data['ENTREES'] if isinstance(item, dict)]
+        
+        prek_entrees = []
+        if 'ENTREES' in prek_menu_data and isinstance(prek_menu_data['ENTREES'], list):
+            prek_entrees = [item.get('MenuItemDescription', '') for item in prek_menu_data['ENTREES'] if isinstance(item, dict)]
+        
+        # Find matching entrees
+        matching_entrees = []
+        for main_entree in main_entrees:
+            if main_entree in prek_entrees:
+                matching_entrees.append(main_entree)
+        
+        if matching_entrees:
+            logger.info(f"Found {len(matching_entrees)} matching entrees for PreK: {matching_entrees}")
+            return matching_entrees[0]  # Return the first match
+        
+        logger.info("No matching entrees found between main line and PreK")
+        return None
+
+    def format_weekly_email(self, week_menus: List[Tuple[datetime, str, Optional[Dict]]], prek_entrees: Dict[str, str]) -> str:
         """Format the weekly menu data into a readable email."""
         test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
         
@@ -220,6 +287,7 @@ class WeeklySchoolMenuNotifier:
         .entree-name {{ font-weight: bold; color: #333; font-size: 16px; }}
         .entree-details {{ color: #666; font-size: 14px; margin-top: 8px; }}
         .allergens {{ color: #d32f2f; font-size: 12px; margin-top: 8px; font-weight: bold; }}
+        .prek-note {{ color: #666; font-size: 12px; font-style: italic; margin-top: 20px; text-align: center; }}
         .footer {{ margin-top: 30px; text-align: center; color: #666; font-size: 12px; }}
         .test-banner {{ background-color: #FF9800; color: white; padding: 10px; text-align: center; margin-bottom: 20px; border-radius: 5px; }}
     </style>
@@ -256,7 +324,14 @@ class WeeklySchoolMenuNotifier:
                 if entrees:
                     for entree in entrees:
                         email_content += '<div class="entree-item">\n'
-                        email_content += f'<div class="entree-name">{entree["MenuItemDescription"]}</div>\n'
+                        
+                        # Entree name with PreK indicator if applicable
+                        entree_name = entree["MenuItemDescription"]
+                        date_key = date_obj.strftime('%m/%d/%Y')
+                        if date_key in prek_entrees and entree_name == prek_entrees[date_key]:
+                            email_content += f'<div class="entree-name">{entree_name} *</div>\n'
+                        else:
+                            email_content += f'<div class="entree-name">{entree_name}</div>\n'
                         
                         # Add serving size if available
                         if entree.get('ServingSizeByGrade'):
@@ -268,7 +343,7 @@ class WeeklySchoolMenuNotifier:
                         
                         # Add allergens if available
                         if entree.get('Allergens'):
-                            email_content += f'<div class="allergens">⚠️ Allergens: {entree["Allergens"]}</div>\n'
+                            email_content += f'<div class="entree-details">⚠️ Allergens: {entree["Allergens"]}</div>\n'
                         
                         email_content += '</div>\n'
                 else:
@@ -277,6 +352,14 @@ class WeeklySchoolMenuNotifier:
                 email_content += '<div class="no-menu">No menu data available for this day</div>\n'
             
             email_content += '</div>\n</div>\n'
+        
+        # Add PreK note if applicable
+        if prek_entrees:
+            email_content += """
+    <div class="prek-note">
+        * Pre-K item
+    </div>
+"""
         
         email_content += """
     <div class="footer">
@@ -359,10 +442,23 @@ class WeeklySchoolMenuNotifier:
             # Fetch menu data for each day
             week_menus = []
             total_entrees = 0
+            prek_entrees = {}  # Dictionary to store PreK entree for each date
             
             for date_obj, date_str in week_dates:
                 logger.info(f"Processing {date_obj.strftime('%A %m/%d')}")
-                menu_data = self.fetch_menu_data(date_str)
+                menu_data = self.fetch_main_menu_data(date_str)
+                
+                # Fetch PreK data to find matching entree
+                prek_menu_data = self.fetch_prek_menu_data(date_str)
+                if prek_menu_data is not None:
+                    prek_entree = self.find_prek_entree(menu_data, prek_menu_data)
+                    if prek_entree:
+                        prek_entrees[date_str] = prek_entree
+                        logger.info(f"PreK entree for {date_obj.strftime('%A')}: {prek_entree}")
+                    else:
+                        logger.info(f"No matching PreK entree found for {date_obj.strftime('%A')}")
+                else:
+                    logger.warning(f"Could not fetch PreK menu data for {date_obj.strftime('%A')}")
                 
                 if menu_data:
                     entrees = self.extract_entrees(menu_data)
@@ -380,7 +476,7 @@ class WeeklySchoolMenuNotifier:
             else:
                 subject = f"Weekly School Lunch Menu - Next Week"
             
-            content = self.format_weekly_email(week_menus)
+            content = self.format_weekly_email(week_menus, prek_entrees)
             logger.info(f"Formatted weekly menu with {total_entrees} total entrees across {len(week_dates)} days")
             
             # Send email
