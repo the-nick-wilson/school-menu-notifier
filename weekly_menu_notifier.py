@@ -395,8 +395,9 @@ class WeeklySchoolMenuNotifier:
             
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 logger.info("SMTP connection established, starting TLS...")
-                logger.info("TLS started, attempting login...")
                 server.starttls()
+                logger.info("TLS started, attempting login...")
+                server.login(self.sender_email, self.sender_password)
                 logger.info("Login successful, sending messages...")
                 
                 for recipient_email in recipients:
