@@ -365,27 +365,41 @@ class WeeklySchoolMenuNotifier:
         return email_content
 
     def send_email(self, subject: str, html_content: str) -> bool:
-        """Send the formatted email to all recipients."""
+        """Send the formatted email to recipients based on test mode."""
         try:
             # Validate SMTP configuration
             if not self.smtp_server:
                 logger.error("SMTP_SERVER is not configured")
                 return False
             
+            # Determine recipients based on test mode
+            test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
+            if test_run:
+                # For test runs, only send to primary recipient
+                recipients = [self.recipient_emails[0]] if self.recipient_emails else []
+                logger.info("TEST_RUN mode - sending only to primary recipient")
+            else:
+                # For normal runs, send to all recipients
+                recipients = self.recipient_emails
+                logger.info("Normal mode - sending to all recipients")
+            
+            if not recipients:
+                logger.error("No recipients configured")
+                return False
+            
             logger.info(f"Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}")
             
             # Send email to each recipient
             success_count = 0
-            total_recipients = len(self.recipient_emails)
+            total_recipients = len(recipients)
             
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 logger.info("SMTP connection established, starting TLS...")
-                server.starttls()
                 logger.info("TLS started, attempting login...")
-                server.login(self.sender_email, self.sender_password)
+                server.starttls()
                 logger.info("Login successful, sending messages...")
                 
-                for recipient_email in self.recipient_emails:
+                for recipient_email in recipients:
                     try:
                         # Create message for this recipient
                         msg = MIMEMultipart('alternative')
