@@ -294,7 +294,7 @@ class SchoolMenuNotifier:
                         # Item name with PreK indicator if applicable
                         item_name = item["MenuItemDescription"]
                         if prek_entree and item_name == prek_entree:
-                            email_content += f'<div class="item-name">{item_name} *</div>\n'
+                            email_content += f'<div class="item-name">{item_name} [Pre-K]</div>\n'
                         else:
                             email_content += f'<div class="item-name">{item_name}</div>\n'
                         
@@ -313,14 +313,6 @@ class SchoolMenuNotifier:
                         email_content += '</div>\n'
                 
                 email_content += '</div>\n'
-        
-        # Add PreK note if applicable
-        if prek_entree:
-            email_content += """
-    <div class="prek-note">
-        * Pre-K item
-    </div>
-"""
         
         email_content += """
     <div class="footer">

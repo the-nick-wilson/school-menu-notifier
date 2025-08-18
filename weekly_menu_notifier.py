@@ -329,7 +329,7 @@ class WeeklySchoolMenuNotifier:
                         entree_name = entree["MenuItemDescription"]
                         date_key = date_obj.strftime('%m/%d/%Y')
                         if date_key in prek_entrees and entree_name == prek_entrees[date_key]:
-                            email_content += f'<div class="entree-name">{entree_name} *</div>\n'
+                            email_content += f'<div class="entree-name">{entree_name} [Pre-K]</div>\n'
                         else:
                             email_content += f'<div class="entree-name">{entree_name}</div>\n'
                         
@@ -352,14 +352,6 @@ class WeeklySchoolMenuNotifier:
                 email_content += '<div class="no-menu">No menu data available for this day</div>\n'
             
             email_content += '</div>\n</div>\n'
-        
-        # Add PreK note if applicable
-        if prek_entrees:
-            email_content += """
-    <div class="prek-note">
-        * Pre-K item
-    </div>
-"""
         
         email_content += """
     <div class="footer">
