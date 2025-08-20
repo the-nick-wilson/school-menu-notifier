@@ -1,20 +1,18 @@
-#!/usr/bin/env python3
 """
 Weekly School Menu Notifier
 
-This script fetches the upcoming week's lunch menus from SchoolCafe API and sends
-a formatted weekly overview email.
+Fetches the upcoming week's lunch menus and sends a weekly overview email.
 """
 
 import os
-import json
-import smtplib
-import requests
-from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from typing import Dict, List, Optional, Tuple
 import logging
+import requests
+import json
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+
+from .common.config import Config
+from .common.email_sender import EmailSender
 
 # Configure logging
 logging.basicConfig(
@@ -23,96 +21,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 class WeeklySchoolMenuNotifier:
+    """Handles fetching and emailing weekly school menu notifications."""
+
     def __init__(self):
-        """Initialize the notifier with configuration from environment variables."""
-        # Log all environment variables for debugging (without sensitive data)
-        logger.info("Environment variables:")
-        logger.info(f"  SCHOOL_ID: {os.getenv('SCHOOL_ID', 'NOT_SET')}")
-        logger.info(f"  GRADE: {os.getenv('GRADE', 'NOT_SET')}")
-        logger.info(f"  SERVING_LINE: {os.getenv('SERVING_LINE', 'NOT_SET')}")
-        logger.info(f"  MEAL_TYPE: {os.getenv('MEAL_TYPE', 'NOT_SET')}")
-        logger.info(f"  SMTP_SERVER: {os.getenv('SMTP_SERVER', 'NOT_SET')}")
-        logger.info(f"  SMTP_PORT: {os.getenv('SMTP_PORT', 'NOT_SET')}")
-        logger.info(f"  SENDER_EMAIL: {os.getenv('SENDER_EMAIL', 'NOT_SET')}")
-        logger.info(f"  RECIPIENT_EMAIL: {os.getenv('RECIPIENT_EMAIL', 'NOT_SET')}")
-        logger.info(f"  TEST_RUN: {os.getenv('TEST_RUN', 'NOT_SET')}")
+        """Initialize the weekly menu notifier with configuration."""
+        logger.info("Starting Weekly School Menu Notifier...")
         
-        # Handle school configuration with fallbacks for empty strings
-        school_id_env = os.getenv('SCHOOL_ID', '')
-        self.school_id = school_id_env if school_id_env else '2f37947e-6d30-4bb3-a306-7f69a3b3ed62'
+        # Load configuration
+        self.config = Config()
         
-        grade_env = os.getenv('GRADE', '')
-        self.grade = grade_env if grade_env else '01'
+        # Initialize email sender
+        self.email_sender = EmailSender(
+            smtp_server=self.config.smtp_server,
+            smtp_port=self.config.smtp_port,
+            sender_email=self.config.sender_email,
+            sender_password=self.config.sender_password
+        )
         
-        serving_line_env = os.getenv('SERVING_LINE', '')
-        self.serving_line = serving_line_env if serving_line_env else 'Main Line'
-        
-        meal_type_env = os.getenv('MEAL_TYPE', '')
-        self.meal_type = meal_type_env if meal_type_env else 'Lunch'
-        
-        # Email configuration with fallbacks for empty strings
-        smtp_server_env = os.getenv('SMTP_SERVER', '')
-        self.smtp_server = smtp_server_env if smtp_server_env else 'smtp.gmail.com'
-        
-        # Handle SMTP_PORT with better error handling
-        smtp_port_str = os.getenv('SMTP_PORT', '')
-        if smtp_port_str:
-            try:
-                self.smtp_port = int(smtp_port_str)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid SMTP_PORT '{smtp_port_str}', using default 587")
-                self.smtp_port = 587
-        else:
-            logger.info("SMTP_PORT not set, using default 587")
-            self.smtp_port = 587
-        
-        self.sender_email = os.getenv('SENDER_EMAIL')
-        self.sender_password = os.getenv('SENDER_PASSWORD')
-        
-        # Handle multiple recipients
-        recipient_email = os.getenv('RECIPIENT_EMAIL', '')
-        additional_recipients = os.getenv('ADDITIONAL_RECIPIENTS', '')
-        
-        # Combine recipients into a list
-        self.recipient_emails = []
-        if recipient_email:
-            self.recipient_emails.append(recipient_email)
-        if additional_recipients:
-            # Split by comma and clean up whitespace
-            additional_list = [email.strip() for email in additional_recipients.split(',') if email.strip()]
-            self.recipient_emails.extend(additional_list)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        self.recipient_emails = [email for email in self.recipient_emails if not (email in seen or seen.add(email))]
-        
-        # API configuration
-        self.api_base_url = 'https://webapis.schoolcafe.com/api/CalendarView/GetDailyMenuitemsByGrade'
-        
-        # Validate required email configuration
-        missing_vars = []
-        if not self.sender_email:
-            missing_vars.append('SENDER_EMAIL')
-        if not self.sender_password:
-            missing_vars.append('SENDER_PASSWORD')
-        if not self.recipient_emails:
-            missing_vars.append('RECIPIENT_EMAIL (or ADDITIONAL_RECIPIENTS)')
-        
-        if missing_vars:
-            raise ValueError(f"Email configuration incomplete. Missing required environment variables: {', '.join(missing_vars)}")
-        
-        # Log configuration (without sensitive data)
-        test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
-        logger.info(f"Configuration loaded - School: {self.school_id}, Grade: {self.grade}, SMTP: {self.smtp_server}:{self.smtp_port}, TEST_RUN: {test_run}")
-        logger.info(f"Recipients: {len(self.recipient_emails)} email(s) configured")
+        logger.info("Configuration loaded successfully")
 
     def get_week_dates(self) -> List[Tuple[datetime, str]]:
         """Get the dates for the upcoming week based on test_run setting."""
-        test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
         today = datetime.now()
         
-        if test_run:
+        if self.config.test_run:
             # For test runs, show the rest of the current week
             logger.info("TEST_RUN is true - showing rest of current week")
             current_weekday = today.weekday()  # Monday=0, Sunday=6
@@ -130,7 +64,12 @@ class WeeklySchoolMenuNotifier:
                 if days_until_friday > 0:
                     end_date = today + timedelta(days=days_until_friday)
                 else:
-                    # If it's already Friday or later, just show tomorrow
+                    # If it's already Friday or later, show next Monday
+                    # Find next Monday (Monday is weekday 0)
+                    days_until_monday = (7 - current_weekday) % 7
+                    if days_until_monday == 0:  # Already Monday
+                        days_until_monday = 7
+                    start_date = today + timedelta(days=days_until_monday)
                     end_date = start_date
                 logger.info(f"Showing rest of week from {start_date.strftime('%A')} to {end_date.strftime('%A')}")
         else:
@@ -151,13 +90,13 @@ class WeeklySchoolMenuNotifier:
         return week_dates
 
     def fetch_main_menu_data(self, serving_date: str) -> Optional[Dict]:
-        """Fetch menu data from the SchoolCafe API."""
+        """Fetch main menu data from the SchoolCafe API."""
         params = {
-            'SchoolId': self.school_id,
+            'SchoolId': self.config.school_id,
             'ServingDate': serving_date,
-            'ServingLine': self.serving_line,
-            'MealType': self.meal_type,
-            'Grade': self.grade,
+            'ServingLine': self.config.serving_line,
+            'MealType': self.config.meal_type,
+            'Grade': self.config.grade,
             'PersonId': 'null'
         }
         
@@ -170,7 +109,7 @@ class WeeklySchoolMenuNotifier:
         
         try:
             logger.info(f"Fetching menu data for {serving_date}")
-            response = requests.get(self.api_base_url, params=params, headers=headers)
+            response = requests.get(self.config.api_base_url, params=params, headers=headers)
             response.raise_for_status()
             
             data = response.json()
@@ -182,6 +121,9 @@ class WeeklySchoolMenuNotifier:
             return None
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing JSON response: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error fetching menu data: {e}")
             return None
 
     def extract_entrees(self, menu_data: Dict) -> List[Dict]:
@@ -196,10 +138,10 @@ class WeeklySchoolMenuNotifier:
     def fetch_prek_menu_data(self, serving_date: str) -> Optional[Dict]:
         """Fetch PreK menu data from the SchoolCafe API."""
         params = {
-            'SchoolId': self.school_id,
+            'SchoolId': self.config.school_id,
             'ServingDate': serving_date,
             'ServingLine': 'Prek Lunch',
-            'MealType': self.meal_type,
+            'MealType': self.config.meal_type,
             'Grade': 'PK',
             'PersonId': 'null'
         }
@@ -213,7 +155,7 @@ class WeeklySchoolMenuNotifier:
         
         try:
             logger.info(f"Fetching PreK menu data for {serving_date}")
-            response = requests.get(self.api_base_url, params=params, headers=headers)
+            response = requests.get(self.config.api_base_url, params=params, headers=headers)
             response.raise_for_status()
             
             data = response.json()
@@ -231,6 +173,9 @@ class WeeklySchoolMenuNotifier:
             return None
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing PreK JSON response: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error fetching PreK menu data: {e}")
             return None
 
     def find_prek_entree(self, main_menu_data: Dict, prek_menu_data: Dict) -> Optional[str]:
@@ -262,10 +207,8 @@ class WeeklySchoolMenuNotifier:
 
     def format_weekly_email(self, week_menus: List[Tuple[datetime, str, Optional[Dict]]], prek_entrees: Dict[str, str]) -> str:
         """Format the weekly menu data into a readable email."""
-        test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
-        
         # Determine header text based on test run
-        if test_run:
+        if self.config.test_run:
             header_text = "This Week's School Lunch Menu"
             subtitle = "Rest of Current Week"
         else:
@@ -296,7 +239,7 @@ class WeeklySchoolMenuNotifier:
 """
         
         # Add test run banner if applicable
-        if test_run:
+        if self.config.test_run:
             email_content += f"""
     <div class="test-banner">
         🧪 <strong>TEST RUN</strong> - This is a test email showing the rest of the current week
@@ -365,75 +308,13 @@ class WeeklySchoolMenuNotifier:
         return email_content
 
     def send_email(self, subject: str, html_content: str) -> bool:
-        """Send the formatted email to recipients based on test mode."""
-        try:
-            # Validate SMTP configuration
-            if not self.smtp_server:
-                logger.error("SMTP_SERVER is not configured")
-                return False
-            
-            # Determine recipients based on test mode
-            test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
-            if test_run:
-                # For test runs, only send to primary recipient
-                recipients = [self.recipient_emails[0]] if self.recipient_emails else []
-                logger.info("TEST_RUN mode - sending only to primary recipient")
-            else:
-                # For normal runs, send to all recipients
-                recipients = self.recipient_emails
-                logger.info("Normal mode - sending to all recipients")
-            
-            if not recipients:
-                logger.error("No recipients configured")
-                return False
-            
-            logger.info(f"Connecting to SMTP server: {self.smtp_server}:{self.smtp_port}")
-            
-            # Send email to each recipient
-            success_count = 0
-            total_recipients = len(recipients)
-            
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                logger.info("SMTP connection established, starting TLS...")
-                server.starttls()
-                logger.info("TLS started, attempting login...")
-                server.login(self.sender_email, self.sender_password)
-                logger.info("Login successful, sending messages...")
-                
-                for recipient_email in recipients:
-                    try:
-                        # Create message for this recipient
-                        msg = MIMEMultipart('alternative')
-                        msg['Subject'] = subject
-                        msg['From'] = self.sender_email
-                        msg['To'] = recipient_email
-                        
-                        # Attach HTML content
-                        html_part = MIMEText(html_content, 'html')
-                        msg.attach(html_part)
-                        
-                        # Send to this recipient
-                        server.send_message(msg)
-                        logger.info(f"Email sent successfully to {recipient_email}")
-                        success_count += 1
-                        
-                    except Exception as e:
-                        logger.error(f"Failed to send email to {recipient_email}: {e}")
-                        # Continue with other recipients
-            
-            if success_count == total_recipients:
-                logger.info(f"All emails sent successfully to {total_recipients} recipient(s)")
-                return True
-            elif success_count > 0:
-                logger.warning(f"Partial success: {success_count}/{total_recipients} emails sent")
-                return True  # Still consider it a success if some emails were sent
-            else:
-                logger.error("Failed to send emails to any recipients")
-                return False
-            
-        except Exception as e:
-            logger.error(f"Error in email sending process: {e}")
-            return False
+        """Send the weekly menu email."""
+        return self.email_sender.send_email(
+            subject=subject,
+            html_content=html_content,
+            recipients=self.config.recipient_emails,
+            test_run=self.config.test_run
+        )
 
     def run(self) -> bool:
         """Main execution method."""
@@ -477,8 +358,7 @@ class WeeklySchoolMenuNotifier:
                 week_menus.append((date_obj, date_str, menu_data))
             
             # Format and send email
-            test_run = os.getenv('TEST_RUN', 'false').lower() == 'true'
-            if test_run:
+            if self.config.test_run:
                 subject = f"Weekly School Lunch Menu - Rest of Current Week"
             else:
                 subject = f"Weekly School Lunch Menu - Next Week"
@@ -496,24 +376,13 @@ class WeeklySchoolMenuNotifier:
 
 
 def main():
-    """Main entry point."""
+    """Main entry point for the weekly notifier."""
     try:
-        logger.info("Starting Weekly School Menu Notifier...")
-        
-        # Test configuration loading first
-        try:
-            notifier = WeeklySchoolMenuNotifier()
-            logger.info("Configuration loaded successfully")
-        except Exception as config_error:
-            logger.error(f"Configuration error: {config_error}")
-            exit(1)
-        
-        # Run the notifier
+        notifier = WeeklySchoolMenuNotifier()
         success = notifier.run()
         
         if success:
             logger.info("Weekly menu notification completed successfully")
-            exit(0)
         else:
             logger.error("Weekly menu notification failed")
             exit(1)
@@ -524,4 +393,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

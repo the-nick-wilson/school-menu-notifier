@@ -7,8 +7,13 @@ configuration from a .env file.
 """
 
 import os
+import sys
 from dotenv import load_dotenv
-from menu_notifier import SchoolMenuNotifier
+
+# Add the src directory to the path so we can import the modules
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+
+from school_menu_notifier.daily_notifier import SchoolMenuNotifier
 
 def load_env_file():
     """Load environment variables from .env file if it exists."""
