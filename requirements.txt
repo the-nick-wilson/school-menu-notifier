@@ -1,2 +1,5 @@
 requests>=2.31.0
-python-dotenv>=1.0.0 
+python-dotenv>=1.0.0
+# Testing dependencies (optional, for development)
+# unittest is built into Python, no external package needed
+# mock is built into Python 3.3+, no external package needed 
