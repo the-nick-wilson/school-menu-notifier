@@ -2,9 +2,10 @@ name: School Menu Notifier
 
 on:
   schedule:
-    # Run every weekday at 5:00 PM MDT/MST (11:00 PM UTC)
+    # Run Monday-Thursday and Sunday at 4:00 PM MDT/MST (10:00 PM UTC)
     # This ensures the menu for the next day is available
-    - cron: '0 23 * * 1-5'
+    # Sunday covers Monday's menu, Monday-Thursday cover Tuesday-Friday respectively
+    - cron: '0 22 * * 0,1-4'
   
   # Allow manual triggering
   workflow_dispatch:
