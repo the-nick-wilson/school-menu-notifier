@@ -140,7 +140,7 @@ class WeeklySchoolMenuNotifier:
         params = {
             'SchoolId': self.config.school_id,
             'ServingDate': serving_date,
-            'ServingLine': 'Prek Lunch',
+            'ServingLine': 'Main Line',  # PreK data is now served from Main Line
             'MealType': self.config.meal_type,
             'Grade': 'PK',
             'PersonId': 'null'
